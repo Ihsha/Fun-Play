@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#0C0A10">
+<link rel="icon" type="image/png" href="ats/fun play logo.png">
+<title>Fun play</title>
+<link rel="stylesheet" href="style.css">
+
+<!-- Open Graph (WhatsApp, Facebook, Discord, LinkedIn) -->
+<meta property="og:title" content="Fun Play">
+<meta property="og:description" content="Fully loaded instant playable games🎮.">
+<meta property="og:image" content="https://fun-play.onrender.com/ats/fun play.webp">
+<meta property="og:url" content="https://fun-play.onrender.com">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Fun Play">
+
+<!-- Twitter/X -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Fun Play">
+<meta name="twitter:description" content="Fully loaded instant playable games🎮.">
+<meta name="twitter:image" content="https://fun-play.onrender.com/ats/fun play.webp">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <img src="ats/fun play logo.png" alt="Fun Play Logo" class="brand-logo">
+    <span>Fun play</span>
+  </div>
+  <div class="eyebrow">Developed by -MR Developers-</div>
+  
+  <div class="header-right">
+    <div class="search-wrap">
+      <span class="search-icon-symbol">🔍</span>
+      <input type="text" id="search-input" placeholder="Search machine..." autocomplete="off">
+    </div>
+
+    <div class="header-stats">
+      <span>🎮 <strong id="stat-total-games">100+</strong> MACHINES</span>
+      <span>♥ <strong id="stat-fav-count">0</strong> FAVS</span>
+    </div>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="hero-glow hero-glow-1" aria-hidden="true"></div>
+  <div class="hero-glow hero-glow-2" aria-hidden="true"></div>
+  <div class="hero-content">
+    <div class="hero-eyebrow">// 100+ MACHINES · ZERO DOWNLOADS · PLAYS INSTANTLY</div>
+    <h1>
+      Welcome To <br>
+      <span class="text" style="display: inline-block;">Fun play</span>
+    </h1>
+    <p>Pick a cabinet below and start playing instantly in your browser.</p>
+    <div class="hero-actions">
+      <button class="coin-btn" onclick="document.querySelector('.library').scrollIntoView({behavior:'smooth'})">INSERT COIN ▸</button>
+      <button class="surprise-btn" onclick="quickRandomPlay()">SURPRISE ME 🎲</button>
+    </div>
+  </div>
+  <div class="hero-floor" aria-hidden="true"></div>
+</section>
+
+<section class="trending-section" aria-label="Trending games">
+  <div class="trending-header">
+    <div class="trending-title">🔥 Trending Now</div>
+    <div class="trending-controls">
+      <button class="trending-arrow" id="trending-prev" aria-label="Previous game">‹</button>
+      <button class="trending-arrow" id="trending-next" aria-label="Next game">›</button>
+    </div>
+  </div>
+  <div class="trending-viewport" id="trending-viewport">
+    <div class="trending-track" id="trending-track">
+      <!-- Slides rendered by app.js -->
+    </div>
+  </div>
+  <div class="trending-dots" id="trending-dots"></div>
+</section>
+
+<div class="library">
+  <div class="library-header">
+    <div class="library-title">// Select Machine</div>
+    <div class="filter-bar">
+      <div class="cat-tabs" id="category-nav">
+        <button class="cat-tab-btn active" data-category="all">ALL MACHINES</button>
+        <button class="cat-tab-btn adfree-tab" data-category="adfree">⚡ 100% AD-FREE GAMES</button>
+        <button class="cat-tab-btn" data-category="arcade">ARCADE &amp; RETRO</button>
+        <button class="cat-tab-btn" data-category="racing">RACING &amp; SPEED</button>
+        <button class="cat-tab-btn" data-category="puzzle">PUZZLE &amp; BRAIN</button>
+        <button class="cat-tab-btn" data-category="action">ACTION &amp; REFLEX</button>
+        <button class="cat-tab-btn" data-category="sports">SPORTS &amp; 2P</button>
+        <button class="cat-tab-btn" data-category="favorites">FAVORITES</button>
+        <button class="cat-tab-btn" data-category="recent">RECENTLY PLAYED</button>
+      </div>
+
+      <div class="sort-box">
+        <label for="sort-select">SORT:</label>
+        <select id="sort-select">
+          <option value="featured">FEATURED</option>
+          <option value="rating">HIGHEST RATED</option>
+          <option value="plays">MOST PLAYED</option>
+          <option value="name">NAME (A-Z)</option>
+        </select>
+      </div>
+    </div>
+    <div class="result-counter" id="result-count">Loading machines...</div>
+  </div>
+
+  <div class="cabinet-row" id="games-grid">
+    <!-- Dynamic Arcade Cabinets rendered by app.js -->
+  </div>
+
+  <div class="load-more-wrap" id="load-more-wrap"></div>
+
+  <div class="empty-box" id="empty-state">
+    NO MACHINES FOUND FOR THIS SEARCH OR CATEGORY.
+  </div>
+</div>
+
+<footer>Fun play — built by (MR Developers) · keyboard &amp; touch supported</footer>
+
+<!-- Cabinet Modal Game Player -->
+<div class="modal-backdrop" id="game-modal" role="dialog" aria-modal="true">
+  <div class="modal-cabinet">
+    
+    <div class="modal-marquee-bar">
+      <div class="modal-title-area">
+        <h3 id="modal-game-title">CABINET NAME</h3>
+        <span class="badge-tag" id="modal-game-badge">ARCADE</span>
+        <span class="rating-tag" id="modal-game-rating">★ 4.9</span>
+      </div>
+
+      <div class="modal-btn-row">
+        <button class="m-btn" id="modal-fav-btn" onclick="toggleFavorite(currentGameObj.id)">♡ FAV</button>
+        <button class="m-btn" onclick="reloadGameIframe()">🔄 RESTART</button>
+        <button class="m-btn" onclick="toggleFullscreen()">⛶ FULLSCREEN</button>
+        <button class="m-btn" onclick="shareGame()">🔗 SHARE</button>
+        <button class="m-btn m-btn-close" onclick="closeGameModal()">✕ CLOSE</button>
+      </div>
+    </div>
+
+    <div class="modal-screen-stage" id="modal-iframe-container">
+      <iframe id="game-iframe" src="about:blank" sandbox="allow-scripts allow-same-origin allow-forms allow-pointer-lock allow-downloads allow-orientation-lock" allow="autoplay; fullscreen; keyboard; gamepad; pointer-lock" allowfullscreen></iframe>
+    </div>
+
+    <div class="modal-footer-panel">
+      <div class="controls-guide-bar">
+        <strong>CONTROLS:</strong> <span id="modal-controls-desc">Use keyboard or touch controls to play.</span>
+      </div>
+
+      <div>
+        <div class="rec-title">// MORE MACHINES YOU MIGHT LIKE</div>
+        <div class="mini-rec-list" id="modal-related-grid">
+          <!-- Related Games -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

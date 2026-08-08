@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Frogger: Retro Highway</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #090d16;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            background: #111827;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #1f2937;
+            font-weight: bold;
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+        }
+
+        .score-hl { color: #a3e635; }
+        .lives-hl { color: #f43f5e; }
+
+        #canvas-container {
+            position: relative;
+            background: #000;
+            border: 4px solid #374151;
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.8);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(17, 24, 39, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        #overlay h2 {
+            font-size: 2.2rem;
+            color: #a3e635;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #a3e635;
+            color: #090d16;
+            border: none;
+            padding: 12px 28px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #65a30d;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #65a30d;
+        }
+
+        /* --- VIRTUAL JOYPAD CONTROLLER --- */
+        #mobile-controller {
+            display: none;
+            margin-top: 15px;
+            position: relative;
+            width: 150px;
+            height: 150px;
+        }
+
+        .dpad-btn {
+            position: absolute;
+            background: #1f2937;
+            border: 2px solid #4b5563;
+            color: white;
+            width: 46px;
+            height: 46px;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #374151;
+            touch-action: manipulation;
+        }
+        .dpad-btn:active {
+            background: #a3e635;
+            color: #090d16;
+        }
+
+        #btn-up    { top: 0; left: 52px; }
+        #btn-left  { top: 52px; left: 0; }
+        #btn-right { top: 52px; right: 52px; }
+        #btn-down  { bottom: 0; left: 52px; }
+
+        @media (max-width: 768px), (pointer: coarse) {
+            #mobile-controller { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <header>
+            <div>SCORE: <span id="lbl-score" class="score-hl">0</span></div>
+            <div>LIVES: <span id="lbl-lives" class="lives-hl">❤❤❤</span></div>
+        </header>
+
+        <div id="canvas-container">
+            <canvas id="froggerCanvas" width="400" height="400"></canvas>
+            
+            <div id="overlay">
+                <h2 id="overlay-title">FROGGER ARCADE</h2>
+                <p id="overlay-desc" style="font-size:0.85rem; color:#9ca3af; margin-bottom:20px;">Cross the highway lanes and ride the river logs safely to reach the grass zones</p>
+                <button onclick="startGame()">START HOPPING</button>
+            </div>
+        </div>
+
+        <div id="mobile-controller">
+            <button class="dpad-btn" id="btn-up" data-dir="UP">▲</button>
+            <button class="dpad-btn" id="btn-left" data-dir="LEFT">◀</button>
+            <button class="dpad-btn" id="btn-right" data-dir="RIGHT">▶</button>
+            <button class="dpad-btn" id="btn-down" data-dir="DOWN">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('froggerCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const lblScore = document.getElementById('lbl-score');
+        const lblLives = document.getElementById('lbl-lives');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        // Logic Grid Settings
+        const GRID_SIZE = 40; // 10 rows, 10 columns matrix board grid space map
+        let score = 0;
+        let lives = 3;
+        let gameActive = false;
+
+        const frog = { x: 0, y: 0, w: 30, h: 30 };
+
+        let obstacles = [];
+
+        function startGame() {
+            score = 0; lives = 3;
+            resetFrogPosition();
+            generateObstacleRows();
+            
+            updateUI();
+            overlay.style.display = 'none';
+            gameActive = true;
+        }
+
+        function resetFrogPosition() {
+            frog.x = 5 * GRID_SIZE + (GRID_SIZE - frog.w) / 2; // Center row
+            frog.y = 9 * GRID_SIZE + (GRID_SIZE - frog.h) / 2; // Bottom starting safety lane
+        }
+
+        function generateObstacleRows() {
+            obstacles = [];
+            // Rows defined sequentially up from bottom highway lanes to top river flows
+            // Type: 0 = Car (Deadly touch), 1 = Log (Safety riding platform)
+            
+            // Highway Rows
+            obstacles.push(createRow(8, 0, -1.5, '#ef4444', 45, 130)); // Car lane 1 (Fast Left)
+            obstacles.push(createRow(7, 0, 1.2, '#f59e0b', 40, 160));  // Car lane 2 (Right)
+            obstacles.push(createRow(6, 0, -0.9, '#3b82f6', 50, 180)); // Car lane 3 (Left)
+            obstacles.push(createRow(5, 0, 2.0, '#ec4899', 35, 120));  // Car lane 4 (Super Fast Right)
+
+            // Safe middle island bank is Row 4 (No obstacles)
+
+            // River Rows
+            obstacles.push(createRow(3, 1, -1.1, '#78350f', 85, 140)); // Log row 1 (Left)
+            obstacles.push(createRow(2, 1, 1.6, '#92400e', 110, 190)); // Log row 2 (Fast Right)
+            obstacles.push(createRow(1, 1, -0.8, '#78350f', 75, 150)); // Log row 3 (Slow Left)
+        }
+
+        function createRow(gridY, type, speed, color, itemW, gap) {
+            let rowItems = [];
+            let yPos = gridY * GRID_SIZE + (GRID_SIZE - 30) / 2;
+            
+            // Prime layout with 4 items per row loop spacing
+            for (let i = 0; i < 4; i++) {
+                rowItems.push({
+                    x: i * gap,
+                    y: yPos,
+                    w: itemW,
+                    h: 26,
+                    speed: speed,
+                    type: type,
+                    color: color,
+                    gridY: gridY
+                });
+            }
+            return rowItems;
+        }
+
+        function updateUI() {
+            lblScore.innerText = score;
+            lblLives.innerText = "❤".repeat(lives);
+        }
+
+        // --- GAME LOGIC PHYSICS RUNTIME ---
+        function updatePhysics() {
+            if (!gameActive) return;
+
+            let frogGridY = Math.floor(frog.y / GRID_SIZE);
+            let onLogPlatform = false;
+            let logVelocity = 0;
+
+            // Update row obstacles vectors translation loop positions
+            obstacles.forEach(row => {
+                row.forEach(item => {
+                    item.x += item.speed;
+
+                    // Bound clamping warp loop recycle boundaries wrap
+                    if (item.speed > 0 && item.x > canvas.width) item.x = -item.w;
+                    if (item.speed < 0 && item.x + item.w < 0) item.x = canvas.width;
+
+                    // Direct geometric collision detection intersecting checks
+                    if (checkCollision(frog, item)) {
+                        if (item.type === 0) {
+                            triggerDeath(); // Hit by car
+                        } else if (item.type === 1) {
+                            onLogPlatform = true;
+                            logVelocity = item.speed; // Inherit log translation speed
+                        }
+                    }
+                });
+            });
+
+            // Handle River Zone rules mapping (Rows 1, 2, 3)
+            if (frogGridY >= 1 && frogGridY <= 3) {
+                if (onLogPlatform) {
+                    frog.x += logVelocity; // Slide along with log physics translation
+                    // Check if log drifted frog completely out of screen bounds limits
+                    if (frog.x + frog.w < 0 || frog.x > canvas.width) {
+                        triggerDeath();
+                    }
+                } else {
+                    triggerDeath(); // Stepped directly into water
+                }
+            }
+        }
+
+        function checkCollision(r1, r2) {
+            return r1.x < r2.x + r2.w &&
+                   r1.x + r1.w > r2.x &&
+                   r1.y < r2.y + r2.h &&
+                   r1.y + r1.h > r2.y;
+        }
+
+        function handleMove(dir) {
+            if (!gameActive) return;
+
+            if (dir === 'UP') frog.y -= GRID_SIZE;
+            if (dir === 'DOWN') frog.y += GRID_SIZE;
+            if (dir === 'LEFT') frog.x -= GRID_SIZE;
+            if (dir === 'RIGHT') frog.x += GRID_SIZE;
+
+            // Clamping safe borders bounds structures limits
+            frog.x = Math.max(0, Math.min(canvas.width - frog.w, frog.x));
+            frog.y = Math.max(0, Math.min(canvas.height - frog.h, frog.y));
+
+            // Victory check condition reached topmost row safety pads zone grid (Row 0)
+            if (Math.floor(frog.y / GRID_SIZE) === 0) {
+                score += 250;
+                updateUI();
+                resetFrogPosition();
+            }
+        }
+
+        function triggerDeath() {
+            lives--;
+            updateUI();
+            if (lives <= 0) {
+                gameActive = false;
+                overlayTitle.innerText = "GAME OVER";
+                overlayDesc.innerText = `You ran out of lives.\nFinal Score: ${score}`;
+                overlay.style.display = 'flex';
+            } else {
+                resetFrogPosition();
+            }
+        }
+
+        // --- GRAPHICS GRAPHICAL DRAW PIPELINE STAGE ---
+        function renderScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw static zone fields backgrounds patterns
+            // River section
+            ctx.fillStyle = '#1e3a8a';
+            ctx.fillRect(0, 1 * GRID_SIZE, canvas.width, 3 * GRID_SIZE);
+            
+            // Highway section
+            ctx.fillStyle = '#1f2937';
+            ctx.fillRect(0, 5 * GRID_SIZE, canvas.width, 4 * GRID_SIZE);
+
+            // Start & Middle island safety banks zones lanes paths (Rows 0, 4, 9)
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(0, 0, canvas.width, GRID_SIZE); // Top Goal Grass
+            ctx.fillRect(0, 4 * GRID_SIZE, canvas.width, GRID_SIZE); // Middle Bank
+            ctx.fillRect(0, 9 * GRID_SIZE, canvas.width, GRID_SIZE); // Bottom Start lane
+
+            // 2. Draw Moving Obstacles components elements objects lists loops
+            obstacles.forEach(row => {
+                row.forEach(item => {
+                    ctx.fillStyle = item.color;
+                    ctx.fillRect(item.x, item.y, item.w, item.h);
+                });
+            });
+
+            // 3. Draw Frogger Character Actor element shape
+            ctx.fillStyle = '#a3e635';
+            ctx.fillRect(frog.x, frog.y, frog.w, frog.h);
+        }
+
+        // --- COMMAND LISTENERS HOOKING INPUT ENGINE ---
+        window.addEventListener('keydown', e => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+            
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') handleMove('UP');
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') handleMove('DOWN');
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') handleMove('LEFT');
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') handleMove('RIGHT');
+        });
+
+        document.querySelectorAll('.dpad-btn').forEach(btn => {
+            const router = (e) => {
+                e.preventDefault();
+                handleMove(btn.getAttribute('data-dir'));
+            };
+            btn.addEventListener('touchstart', router);
+            btn.addEventListener('mousedown', router);
+        });
+
+        function frameTick() {
+            updatePhysics();
+            renderScene();
+            requestAnimationFrame(frameTick);
+        }
+
+        frameTick();
+    </script>
+</body>
+</html>

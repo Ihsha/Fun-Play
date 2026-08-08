@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arcade Pong: Levels & Difficulties</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #ui-menu {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            background: #222;
+            padding: 30px;
+            border: 4px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            background: #000;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 10px 20px;
+            font-size: 1rem;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover, button.active {
+            background: #fff;
+            color: #000;
+            font-weight: bold;
+            box-shadow: 0 0 8px #fff;
+        }
+
+        #game-container {
+            display: none;
+            position: relative;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #hud {
+            width: 800px;
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        canvas {
+            background: #050505;
+            border: 4px solid #fff;
+            display: block;
+            box-shadow: 0 0 25px rgba(255,255,255,0.1);
+        }
+
+        #overlay {
+            position: absolute;
+            top: 50px;
+            left: 0;
+            width: 800px;
+            height: 500px;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.85);
+            text-align: center;
+        }
+
+        #overlay h2 {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-menu">
+        <h1>RETRO PONG</h1>
+        <p>Select AI Difficulty:</p>
+        <div class="btn-group">
+            <button onclick="setDifficulty('EASY', this)" class="active">EASY</button>
+            <button onclick="setDifficulty('MEDIUM', this)">MEDIUM</button>
+            <button onclick="setDifficulty('HARD', this)">HARD</button>
+        </div>
+        <p style="margin-top: 15px;">Win 5 points to advance levels!</p>
+        <button onclick="startGame()" style="margin-top: 15px; font-size: 1.3rem; padding: 12px 30px;">START GAME</button>
+    </div>
+
+    <div id="game-container">
+        <div id="hud">
+            <span id="level-txt">LEVEL: 1/5</span>
+            <span id="modifier-txt">MODE: NORMAL</span>
+            <span id="score-txt">PLAYER: 0 | CPU: 0</span>
+        </div>
+        <canvas id="pongCanvas" width="800" height="500"></canvas>
+        <div id="overlay">
+            <h2 id="overlay-title">LEVEL CLEARED!</h2>
+            <p id="overlay-desc">Press SPACE to Continue</p>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiMenu = document.getElementById('ui-menu');
+        const gameContainer = document.getElementById('game-container');
+        const overlay = document.getElementById('overlay');
+        
+        // HUD Elements
+        const levelTxt = document.getElementById('level-txt');
+        const modifierTxt = document.getElementById('modifier-txt');
+        const scoreTxt = document.getElementById('score-txt');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        // Core Configuration & States
+        let currentLevel = 1;
+        const maxLevel = 5;
+        let pointsToWin = 5;
+        let isPaused = false;
+        let gameRunning = false;
+        
+        let difficulty = 'EASY'; 
+        let aiSpeedModifier = 3.5; // Adjusted by selection
+
+        // Keyboard Controls State
+        const keys = {};
+
+        // Level Rules Configuration
+        const levelSettings = {
+            1: { name: "NORMAL", ballSpeed: 5, paddleHeight: 100, obstacle: false },
+            2: { name: "FAST TRACK", ballSpeed: 7, paddleHeight: 100, obstacle: false },
+            3: { name: "SHRINKING PADDLES", ballSpeed: 6, paddleHeight: 65, obstacle: false },
+            4: { name: "THE BARRIER", ballSpeed: 6, paddleHeight: 100, obstacle: true },
+            5: { name: "MAYHEM (FAST + SMALL)", ballSpeed: 8, paddleHeight: 55, obstacle: true }
+        };
+
+        // Game Entities
+        const player = { x: 15, y: 200, width: 12, height: 100, score: 0, speed: 7 };
+        const ai = { x: 773, y: 200, width: 12, height: 100, score: 0, speed: 4 };
+        const ball = { x: 400, y: 250, radius: 8, speedX: 5, speedY: 3, baseSpeed: 5 };
+        const obstacle = { x: 390, y: 175, width: 20, height: 150, dir: 1, speed: 2 };
+
+        // Handle Setup Menu Choices
+        function setDifficulty(level, element) {
+            difficulty = level;
+            document.querySelectorAll('.btn-group button').forEach(b => b.classList.remove('active'));
+            element.classList.add('active');
+
+            if (level === 'EASY') aiSpeedModifier = 3.2;
+            if (level === 'MEDIUM') aiSpeedModifier = 4.8;
+            if (level === 'HARD') aiSpeedModifier = 6.8;
+        }
+
+        function startGame() {
+            uiMenu.style.display = 'none';
+            gameContainer.style.display = 'flex';
+            currentLevel = 1;
+            player.score = 0;
+            ai.score = 0;
+            gameRunning = true;
+            loadLevel(currentLevel);
+            loop();
+        }
+
+        // Apply distinct rules per level progression
+        function loadLevel(lvl) {
+            const settings = levelSettings[lvl];
+            levelTxt.innerText = `LEVEL: ${lvl}/${maxLevel}`;
+            modifierTxt.innerText = `MODE: ${settings.name}`;
+            updateScoreboard();
+
+            // Set dynamic values
+            player.height = settings.paddleHeight;
+            ai.height = settings.paddleHeight;
+            ball.baseSpeed = settings.ballSpeed;
+
+            resetBall();
+        }
+
+        function resetBall() {
+            ball.x = canvas.width / 2;
+            ball.y = canvas.height / 2;
+            // Fire towards the winner/loser randomly at angles
+            ball.speedX = (Math.random() > 0.5 ? 1 : -1) * ball.baseSpeed;
+            ball.speedY = (Math.random() * 2 - 1) * ball.baseSpeed;
+        }
+
+        function updateScoreboard() {
+            scoreTxt.innerText = `PLAYER: ${player.score} | CPU: ${ai.score}`;
+        }
+
+        // Input Listeners
+        window.addEventListener('keydown', e => { 
+            keys[e.code] = true; 
+            if (e.code === 'Space' && isPaused) {
+                resumeGame();
+            }
+        });
+        window.addEventListener('keyup', e => { keys[e.code] = false; });
+        
+        // Touch Interaction (Mobile friendly)
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            const touchY = e.touches[0].clientY - rect.top;
+            player.y = touchY - player.height / 2;
+        });
+
+        // Trigger Intermission Layout
+        function showOverlay(title, desc) {
+            isPaused = true;
+            overlayTitle.innerText = title;
+            overlayDesc.innerText = desc;
+            overlay.style.display = 'flex';
+        }
+
+        function resumeGame() {
+            isPaused = false;
+            overlay.style.display = 'none';
+            if (player.score >= pointsToWin) {
+                currentLevel++;
+                player.score = 0;
+                ai.score = 0;
+                if (currentLevel > maxLevel) {
+                    // Win state complete
+                    uiMenu.style.display = 'flex';
+                    gameContainer.style.display = 'none';
+                    gameRunning = false;
+                } else {
+                    loadLevel(currentLevel);
+                }
+            } else if (ai.score >= pointsToWin) {
+                // Loss state complete
+                uiMenu.style.display = 'flex';
+                gameContainer.style.display = 'none';
+                gameRunning = false;
+            } else {
+                resetBall();
+            }
+        }
+
+        // Mechanical Engine Calculations
+        function update() {
+            if (isPaused || !gameRunning) return;
+
+            // 1. Paddle Controls System
+            if (keys['KeyW'] || keys['ArrowUp']) player.y -= player.speed;
+            if (keys['KeyS'] || keys['ArrowDown']) player.y += player.speed;
+            
+            // Boundary constraints
+            player.y = Math.max(10, Math.min(canvas.height - player.height - 10, player.y));
+
+            // 2. Adaptive AI Routine (Modified by selected Difficulty limiters)
+            let aiTarget = ball.y - ai.height / 2;
+            let currentAiSpeed = Math.min(aiSpeedModifier, Math.abs(aiTarget - ai.y));
+            if (ai.y < aiTarget) ai.y += currentAiSpeed;
+            else if (ai.y > aiTarget) ai.y -= currentAiSpeed;
+            ai.y = Math.max(10, Math.min(canvas.height - ai.height - 10, ai.y));
+
+            // 3. Moving Central Obstacle Routine (For levels 4 & 5)
+            if (levelSettings[currentLevel].obstacle) {
+                obstacle.y += obstacle.speed * obstacle.dir;
+                if (obstacle.y <= 10 || obstacle.y >= canvas.height - obstacle.height - 10) {
+                    obstacle.dir *= -1; // Reverse course
+                }
+            }
+
+            // 4. Ball Dynamics & Vectors
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // Bounce on ceiling/floor
+            if (ball.y - ball.radius <= 0 || ball.y + ball.radius >= canvas.height) {
+                ball.speedY *= -1;
+            }
+
+            // 5. Collision Checks: Obstacle
+            if (levelSettings[currentLevel].obstacle) {
+                if (ball.x + ball.radius > obstacle.x && ball.x - ball.radius < obstacle.x + obstacle.width &&
+                    ball.y + ball.radius > obstacle.y && ball.y - ball.radius < obstacle.y + obstacle.height) {
+                    ball.speedX *= -1;
+                    // Add slight push forward to avoid sticky entrapment loops
+                    ball.x += ball.speedX > 0 ? 5 : -5;
+                }
+            }
+
+            // 6. Collision Checks: Player Paddle
+            if (ball.x - ball.radius <= player.x + player.width && ball.x + ball.radius >= player.x) {
+                if (ball.y >= player.y && ball.y <= player.y + player.height) {
+                    // Deflection angle mapping based on where ball hits paddle
+                    let relativeIntersectY = (player.y + (player.height / 2)) - ball.y;
+                    let normalizedIntersectY = (relativeIntersectY / (player.height / 2));
+                    let bounceAngle = normalizedIntersectY * (Math.PI / 3);
+
+                    let currentSpeed = Math.sqrt(ball.speedX * ball.speedX + ball.speedY * ball.speedY);
+                    ball.speedX = Math.cos(bounceAngle) * (currentSpeed + 0.4); // Incremental speed surge
+                    ball.speedY = -Math.sin(bounceAngle) * (currentSpeed + 0.4);
+                    ball.x = player.x + player.width + ball.radius; // Resolve clip overlap
+                }
+            }
+
+            // 7. Collision Checks: CPU Paddle
+            if (ball.x + ball.radius >= ai.x && ball.x - ball.radius <= ai.x + ai.width) {
+                if (ball.y >= ai.y && ball.y <= ai.y + ai.height) {
+                    let relativeIntersectY = (ai.y + (ai.height / 2)) - ball.y;
+                    let normalizedIntersectY = (relativeIntersectY / (ai.height / 2));
+                    let bounceAngle = normalizedIntersectY * (Math.PI / 3);
+
+                    let currentSpeed = Math.sqrt(ball.speedX * ball.speedX + ball.speedY * ball.speedY);
+                    ball.speedX = -Math.cos(bounceAngle) * (currentSpeed + 0.4);
+                    ball.speedY = -Math.sin(bounceAngle) * (currentSpeed + 0.4);
+                    ball.x = ai.x - ball.radius; // Resolve clip overlap
+                }
+            }
+
+            // 8. Goal Scoring Scenarios
+            if (ball.x - ball.radius < 0) {
+                ai.score++;
+                updateScoreboard();
+                if (ai.score >= pointsToWin) {
+                    showOverlay("GAME OVER", "CPU WINS THIS LEVEL. PRESS SPACE TO RETURN");
+                } else {
+                    resetBall();
+                }
+            } else if (ball.x + ball.radius > canvas.width) {
+                player.score++;
+                updateScoreboard();
+                if (player.score >= pointsToWin) {
+                    if (currentLevel === maxLevel) {
+                        showOverlay("VICTORY!", "YOU CRUSHED ALL LEVELS! PRESS SPACE");
+                    } else {
+                        showOverlay("LEVEL CLEARED!", "EXCELLENT WORK. PRESS SPACE FOR NEXT LEVEL");
+                    }
+                } else {
+                    resetBall();
+                }
+            }
+        }
+
+        // Render Graphics Pipeline
+        function draw() {
+            // Clear Frame
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Net divider centerline
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.lineWidth = 4;
+            ctx.setLineDash([15, 15]);
+            ctx.beginPath();
+            ctx.moveTo(canvas.width / 2, 0);
+            ctx.lineTo(canvas.width / 2, canvas.height);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset dash state
+
+            // Draw Interactive Paddles
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillRect(ai.x, ai.y, ai.width, ai.height);
+
+            // Draw Central Level Obstacles
+            if (levelSettings[currentLevel].obstacle) {
+                ctx.fillStyle = "#ff3333";
+                ctx.fillRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
+            }
+
+            // Draw Square Pixel-styled Ball
+            ctx.fillStyle = "#00ffcc";
+            ctx.fillRect(ball.x - ball.radius, ball.y - ball.radius, ball.radius * 2, ball.radius * 2);
+        }
+
+        // Animation Loop
+        function loop() {
+            update();
+            draw();
+            if (gameRunning) requestAnimationFrame(loop);
+        }
+    </script>
+</body>
+</html>

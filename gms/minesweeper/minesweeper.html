@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minesweeper — Cabinet Row</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .mine-grid{
+    display:grid;
+    grid-template-columns: repeat(9, 32px);
+    grid-template-rows: repeat(9, 32px);
+    gap: 3px;
+  }
+  .mcell{
+    background: var(--wood-light);
+    border: 2px solid var(--wood-rail);
+    border-radius: 4px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Mono', monospace;
+    font-weight:700;
+    font-size: 0.85rem;
+    cursor:pointer;
+    user-select:none;
+  }
+  .mcell.open{ background:#10331f; cursor:default; border-color:#0c2616; }
+  .mcell.flag{ background: var(--cherry); }
+  .mcell.mine{ background: var(--cherry); }
+  .n1{ color:#7fb8ff; } .n2{ color:#7fd98a; } .n3{ color:#ff8a8a; }
+  .n4{ color:#c79bff; } .n5{ color:#ffb347; } .n6{ color:#5be0d8; }
+  .n7{ color:#F4ECD8; } .n8{ color:#aaa; }
+  @media (max-width:420px){
+    .mine-grid{ grid-template-columns: repeat(9, 30px); grid-template-rows: repeat(9, 30px); }
+    .mcell{ font-size:0.75rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <a class="back-link" href="../../index.html">◂ ROW</a>
+  <div class="brand" style="font-size:0.85rem;">MINESWEEPER</div>
+  <div></div>
+</div>
+
+<div class="game-wrap">
+  <div class="score-panel">
+    <div class="led"><span class="num" id="mines-left">10</span><span class="lab">MINES</span></div>
+    <div class="led"><span class="num" id="timer">0</span><span class="lab">SECONDS</span></div>
+  </div>
+
+  <div class="stage">
+    <div class="mine-grid" id="grid"></div>
+    <div class="overlay-msg" id="overlay">
+      <div id="overlay-text">BOOM</div>
+      <button onclick="restart()">PLAY AGAIN</button>
+    </div>
+  </div>
+
+  <p class="howto">Left-click to reveal · right-click to flag · 9×9, 10 mines</p>
+</div>
+
+<script src="minesweeper.js"></script>
+</body>
+</html>

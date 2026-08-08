@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Universal Cross-Platform Snake</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #111827;
+            color: #f3f4f6;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 15px;
+            overflow: hidden;
+        }
+
+        #game-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        #score {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #10b981;
+        }
+
+        /* Speed Control Panel */
+        .speed-panel {
+            display: flex;
+            background: #1f2937;
+            padding: 4px;
+            border-radius: 8px;
+            gap: 4px;
+        }
+
+        .speed-btn {
+            background: none;
+            border: none;
+            color: #9ca3af;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+
+        .speed-btn.active {
+            background: #10b981;
+            color: #111827;
+        }
+
+        /* Game Arena */
+        #canvas-wrapper {
+            position: relative;
+            background: #030712;
+            border: 4px solid #374151;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 7, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 8px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #overlay h2 {
+            font-size: 2.2rem;
+            color: #ef4444;
+            margin-bottom: 8px;
+        }
+
+        #overlay p {
+            color: #9ca3af;
+        }
+
+        /* --- SMART MOBILE CONTROLLER --- */
+        /* Hidden on Desktop by default */
+        #mobile-controller {
+            display: none; 
+            margin-top: 25px;
+            position: relative;
+            width: 160px;
+            height: 160px;
+        }
+
+        .dpad-btn {
+            position: absolute;
+            background: #1f2937;
+            border: 2px solid #4b5563;
+            color: white;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            touch-action: manipulation;
+        }
+
+        .dpad-btn:active {
+            background: #10b981;
+            border-color: #34d399;
+            transform: scale(0.95);
+        }
+
+        #btn-up    { top: 0; left: 55px; }
+        #btn-left  { top: 55px; left: 0; }
+        #btn-right { top: 55px; right: 0; }
+        #btn-down  { bottom: 0; left: 55px; }
+
+        /* CSS Rule: Force Show if the device screen is small (Phones) OR has touch controls */
+        @media (max-width: 768px), (pointer: coarse) {
+            #mobile-controller {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <header>
+            <div id="score">SCORE: 0</div>
+            <div class="speed-panel">
+                <button class="speed-btn" onclick="setSpeed('SLOW', this)">SLOW</button>
+                <button class="speed-btn active" onclick="setSpeed('NORMAL', this)">NORM</button>
+                <button class="speed-btn" onclick="setSpeed('FAST', this)">FAST</button>
+            </div>
+        </header>
+
+        <div id="canvas-wrapper">
+            <canvas id="gameCanvas" width="400" height="400"></canvas>
+            <div id="overlay">
+                <h2 id="overlay-title">SNAKE GAME</h2>
+                <p id="overlay-desc">Tap Arena, Controller, or Spacebar to Play</p>
+            </div>
+        </div>
+
+        <div id="mobile-controller">
+            <button class="dpad-btn" id="btn-up" data-dir="UP">▲</button>
+            <button class="dpad-btn" id="btn-left" data-dir="LEFT">◀</button>
+            <button class="dpad-btn" id="btn-right" data-dir="RIGHT">▶</button>
+            <button class="dpad-btn" id="btn-down" data-dir="DOWN">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreBoard = document.getElementById('score');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        const gridSize = 20;
+        const tileCount = canvas.width / gridSize;
+
+        let snake = [];
+        let food = { x: 0, y: 0 };
+        let direction = 'RIGHT';
+        let nextDirection = 'RIGHT';
+        let score = 0;
+        let gameLoopId = null;
+        let isGameOver = true;
+        let frameDelay = 110; // Default Normal Speed
+
+        function initGame() {
+            snake = [
+                { x: 7, y: 10 },
+                { x: 6, y: 10 },
+                { x: 5, y: 10 }
+            ];
+            direction = 'RIGHT';
+            nextDirection = 'RIGHT';
+            score = 0;
+            scoreBoard.innerText = `SCORE: ${score}`;
+            spawnFood();
+            isGameOver = false;
+            overlay.style.display = 'none';
+            
+            startGameTimer();
+        }
+
+        function startGameTimer() {
+            clearInterval(gameLoopId);
+            gameLoopId = setInterval(() => {
+                updatePosition();
+                drawGame();
+            }, frameDelay);
+        }
+
+        function setSpeed(mode, element) {
+            document.querySelectorAll('.speed-btn').forEach(btn => btn.classList.remove('active'));
+            element.classList.add('active');
+            
+            if (mode === 'SLOW') frameDelay = 170;
+            if (mode === 'NORMAL') frameDelay = 110;
+            if (mode === 'FAST') frameDelay = 65;
+
+            if (!isGameOver) startGameTimer(); // Dynamic speed update mid-game
+        }
+
+        function spawnFood() {
+            food.x = Math.floor(Math.random() * tileCount);
+            food.y = Math.floor(Math.random() * tileCount);
+            // Don't spawn food inside snake body
+            for (let part of snake) {
+                if (part.x === food.x && part.y === food.y) {
+                    spawnFood();
+                    break;
+                }
+            }
+        }
+
+        function updatePosition() {
+            if (isGameOver) return;
+            direction = nextDirection;
+            
+            let headX = snake[0].x;
+            let headY = snake[0].y;
+
+            if (direction === 'UP') headY--;
+            if (direction === 'DOWN') headY++;
+            if (direction === 'LEFT') headX--;
+            if (direction === 'RIGHT') headX++;
+
+            // Collision: Wall crash
+            if (headX < 0 || headX >= tileCount || headY < 0 || headY >= tileCount) {
+                triggerGameOver();
+                return;
+            }
+
+            // Collision: Self crash
+            for (let part of snake) {
+                if (part.x === headX && part.y === headY) {
+                    triggerGameOver();
+                    return;
+                }
+            }
+
+            const newHead = { x: headX, y: headY };
+            snake.unshift(newHead);
+
+            // Food eaten handling
+            if (headX === food.x && headY === food.y) {
+                score += 10;
+                scoreBoard.innerText = `SCORE: ${score}`;
+                spawnFood();
+            } else {
+                snake.pop(); // Standard movement pacing
+            }
+        }
+
+        function drawGame() {
+            ctx.fillStyle = '#030712';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Food
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(food.x * gridSize + gridSize/2, food.y * gridSize + gridSize/2, gridSize/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw Snake
+            snake.forEach((part, index) => {
+                ctx.fillStyle = index === 0 ? '#34d399' : '#10b981';
+                ctx.fillRect(part.x * gridSize + 1, part.y * gridSize + 1, gridSize - 2, gridSize - 2);
+            });
+        }
+
+        function triggerGameOver() {
+            isGameOver = true;
+            clearInterval(gameLoopId);
+            overlayTitle.innerText = "GAME OVER";
+            overlayDesc.innerText = `Final Score: ${score}\n\nTap Screen or Press Space to Restart`;
+            overlay.style.display = 'flex';
+        }
+
+        function changeDirection(targetDir) {
+            if (targetDir === 'UP' && direction !== 'DOWN') nextDirection = 'UP';
+            if (targetDir === 'DOWN' && direction !== 'UP') nextDirection = 'DOWN';
+            if (targetDir === 'LEFT' && direction !== 'RIGHT') nextDirection = 'LEFT';
+            if (targetDir === 'RIGHT' && direction !== 'LEFT') nextDirection = 'RIGHT';
+        }
+
+        // --- DESKTOP CONTROLS (Keyboard) ---
+        window.addEventListener('keydown', e => {
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault(); // Stop webpage scrolling
+            }
+
+            if (isGameOver && e.code === 'Space') {
+                initGame();
+                return;
+            }
+
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') changeDirection('UP');
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') changeDirection('DOWN');
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') changeDirection('LEFT');
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') changeDirection('RIGHT');
+        });
+
+        // --- PHONE CONTROLS (D-Pad & Screen Taps) ---
+        document.getElementById('canvas-wrapper').addEventListener('click', () => {
+            if (isGameOver) initGame();
+        });
+
+        document.querySelectorAll('.dpad-btn').forEach(btn => {
+            // Listen to touchstart for fast mobile response, mousedown for testing on PC
+            const handleTouchAction = (e) => {
+                e.preventDefault();
+                if (isGameOver) initGame();
+                else changeDirection(btn.getAttribute('data-dir'));
+            };
+            btn.addEventListener('touchstart', handleTouchAction);
+            btn.addEventListener('mousedown', handleTouchAction);
+        });
+
+        // Frame rendering initialization
+        drawGame();
+    </script>
+</body>
+</html>

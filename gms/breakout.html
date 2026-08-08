@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Breakout: Multi-Level Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 480px;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            background: #1e293b;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+
+        .stat-highlight {
+            color: #38bdf8;
+        }
+        .lives-highlight {
+            color: #ef4444;
+        }
+
+        #canvas-container {
+            position: relative;
+            background: #020617;
+            border: 4px solid #475569;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+            overflow: hidden;
+            width: 100%;
+            aspect-ratio: 4 / 5;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        #overlay h2 {
+            font-size: 2.2rem;
+            color: #38bdf8;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+        }
+
+        #overlay p {
+            color: #94a3b8;
+            font-size: 1rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        button {
+            background: #0ea5e9;
+            color: #fff;
+            border: none;
+            padding: 12px 28px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            background: #0284c7;
+        }
+        button:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <header>
+            <div>STAGE: <span id="lbl-level" class="stat-highlight">1/4</span></div>
+            <div>SCORE: <span id="lbl-score" class="stat-highlight">0</span></div>
+            <div>LIVES: <span id="lbl-lives" class="lives-highlight">❤❤❤</span></div>
+        </header>
+
+        <div id="canvas-container">
+            <canvas id="breakoutCanvas" width="400" height="500"></canvas>
+            
+            <div id="overlay">
+                <h2 id="overlay-title">BREAKOUT HERO</h2>
+                <p id="overlay-desc">Destroy all bricks to clear the stages. Use your mouse, keys, or touch to slide the paddle.</p>
+                <button id="overlay-btn" onclick="handleOverlayAction()">START GAME</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('breakoutCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // UI Elements
+        const lblLevel = document.getElementById('lbl-level');
+        const lblScore = document.getElementById('lbl-score');
+        const lblLives = document.getElementById('lbl-lives');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+        const overlayBtn = document.getElementById('overlay-btn');
+
+        // Game State Variables
+        let score = 0;
+        let lives = 3;
+        let currentLevel = 1;
+        const maxLevels = 4;
+        let isPaused = true;
+        let gameActive = false;
+
+        // Paddle Configuration
+        const paddle = {
+            width: 75,
+            height: 12,
+            x: (canvas.width - 75) / 2,
+            y: canvas.height - 30,
+            speed: 7,
+            isMovingLeft: false,
+            isMovingRight: false
+        };
+
+        // Ball Configuration
+        const ball = {
+            x: canvas.width / 2,
+            y: canvas.height - 45,
+            radius: 7,
+            speedX: 3,
+            speedY: -3,
+            baseSpeed: 4
+        };
+
+        // Brick Architecture Storage
+        let bricks = [];
+        const brickConfig = {
+            rowCount: 5,
+            columnCount: 6,
+            width: 54,
+            height: 16,
+            padding: 6,
+            offsetTop: 45,
+            offsetLeft: 23
+        };
+
+        // Color palettes for brick tiers
+        const brickColors = ["#f43f5e", "#f59e0b", "#10b981", "#3b82f6", "#a855f7"];
+
+        // Level Layout Data Configuration Matrix
+        const levelLayouts = {
+            1: {
+                name: "The Classic Wall",
+                ballSpeed: 4.5,
+                // Full grid filled
+                grid: [
+                    [1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1],
+                    [1, 1, 1, 1, 1, 1]
+                ]
+            },
+            2: {
+                name: "Pyramid Steps",
+                ballSpeed: 5.2,
+                // Pattern forming a pyramid step
+                grid: [
+                    [0, 1, 1, 1, 1, 0],
+                    [0, 1, 1, 1, 1, 0],
+                    [1, 1, 0, 0, 1, 1],
+                    [1, 1, 1, 1, 1, 1]
+                ]
+            },
+            3: {
+                name: "Space Invaders",
+                ballSpeed: 6.0,
+                // Checkerboard spaced layout
+                grid: [
+                    [1, 0, 1, 1, 0, 1],
+                    [0, 1, 1, 1, 1, 0],
+                    [1, 1, 0, 0, 1, 1],
+                    [1, 0, 1, 1, 0, 1],
+                    [0, 1, 0, 0, 1, 0]
+                ]
+            },
+            4: {
+                name: "The Iron Fortress",
+                ballSpeed: 6.8,
+                // Dense pillars with heavy point blocks
+                grid: [
+                    [1, 1, 1, 1, 1, 1],
+                    [1, 0, 1, 1, 0, 1],
+                    [1, 1, 1, 1, 1, 1],
+                    [1, 0, 0, 0, 0, 1],
+                    [1, 1, 1, 1, 1, 1]
+                ]
+            }
+        };
+
+        // --- Core Initialization and Mechanics ---
+        function handleOverlayAction() {
+            if (!gameActive) {
+                // Completely new game session
+                score = 0;
+                lives = 3;
+                currentLevel = 1;
+                gameActive = true;
+                loadLevel(currentLevel);
+            } else if (lives <= 0) {
+                // Retry after failure
+                lives = 3;
+                score = 0;
+                currentLevel = 1;
+                loadLevel(currentLevel);
+            } else {
+                // Loading the next progressive level
+                loadLevel(currentLevel);
+            }
+
+            overlay.style.display = 'none';
+            isPaused = false;
+        }
+
+        function loadLevel(lvl) {
+            const layoutData = levelLayouts[lvl];
+            lblLevel.innerText = `${lvl}/${maxLevels}`;
+            updateHeaderUI();
+
+            // Set dynamic engine elements
+            ball.baseSpeed = layoutData.ballSpeed;
+            resetBallAndPaddle();
+
+            // Build brick entities based on custom layout maps
+            bricks = [];
+            const map = layoutData.grid;
+            
+            for (let r = 0; r < map.length; r++) {
+                bricks[r] = [];
+                for (let c = 0; c < map[r].length; c++) {
+                    if (map[r][c] === 1) {
+                        bricks[r][c] = {
+                            x: 0,
+                            y: 0,
+                            status: 1, // 1 = Active, 0 = Broken
+                            color: brickColors[r % brickColors.length]
+                        };
+                    } else {
+                        bricks[r][c] = { status: 0 }; // Dead space cell
+                    }
+                }
+            }
+        }
+
+        function resetBallAndPaddle() {
+            paddle.x = (canvas.width - paddle.width) / 2;
+            ball.x = canvas.width / 2;
+            ball.y = paddle.y - ball.radius - 2;
+            // Launch upward at a fixed responsive vertical angle
+            ball.speedX = (Math.random() * 2 - 1) * (ball.baseSpeed * 0.6);
+            ball.speedY = -ball.baseSpeed;
+        }
+
+        function updateHeaderUI() {
+            lblScore.innerText = score;
+            lblLives.innerText = "❤".repeat(lives);
+        }
+
+        // --- Event Listeners (Desktop Mouse & Keys + Responsive Touch) ---
+        window.addEventListener('keydown', e => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') paddle.isMovingLeft = true;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') paddle.isMovingRight = true;
+        });
+
+        window.addEventListener('keyup', e => {
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') paddle.isMovingLeft = false;
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') paddle.isMovingRight = false;
+        });
+
+        // Mouse tracking inside the canvas element bounds
+        window.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            // Calculate scale factor between canvas internal sizing and view layout bounds
+            const scaleX = canvas.width / rect.width;
+            const relativeX = (e.clientX - rect.left) * scaleX;
+            
+            if (relativeX > 0 && relativeX < canvas.width) {
+                paddle.x = relativeX - paddle.width / 2;
+            }
+        });
+
+        // Touch tracking architecture for mobile viewport drag handles
+        window.addEventListener('touchmove', e => {
+            if (isPaused) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const relativeX = (e.touches[0].clientX - rect.left) * scaleX;
+
+            if (relativeX > 0 && relativeX < canvas.width) {
+                paddle.x = relativeX - paddle.width / 2;
+            }
+        }, { passive: true });
+
+        // --- Physics Calculations Engine Loop ---
+        function updatePhysics() {
+            if (isPaused) return;
+
+            // 1. Paddle keyboard locomotion handling
+            if (paddle.isMovingLeft) paddle.x -= paddle.speed;
+            if (paddle.isMovingRight) paddle.x += paddle.speed;
+            paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
+
+            // 2. Ball translation steps
+            ball.x += ball.speedX;
+            ball.y += ball.speedY;
+
+            // 3. Wall collision rebounds
+            if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
+                ball.speedX *= -1;
+            }
+            if (ball.y - ball.radius < 0) {
+                ball.speedY *= -1;
+            }
+
+            // 4. Paddle collision interaction
+            if (ball.y + ball.radius >= paddle.y && ball.y - ball.radius <= paddle.y + paddle.height) {
+                if (ball.x >= paddle.x && ball.x <= paddle.x + paddle.width) {
+                    // Map reflection angle vectors depending on hit localization offset point
+                    let hitPointOffset = ball.x - (paddle.x + paddle.width / 2);
+                    let normalizedHitOffset = hitPointOffset / (paddle.width / 2);
+                    
+                    // Cap angular acceleration
+                    ball.speedX = normalizedHitOffset * (ball.baseSpeed * 0.8);
+                    ball.speedY = -Math.sqrt(Math.max(2, ball.baseSpeed * ball.baseSpeed - ball.speedX * ball.speedX));
+                }
+            }
+
+            // 5. Out of bounds floor drain triggers (Lose life condition)
+            if (ball.y + ball.radius > canvas.height) {
+                lives--;
+                updateHeaderUI();
+                if (lives <= 0) {
+                    triggerGameOver(false);
+                } else {
+                    resetBallAndPaddle();
+                }
+            }
+
+            // 6. Brick matrix collision routines
+            let activeBricksFound = false;
+            for (let r = 0; r < bricks.length; r++) {
+                for (let c = 0; c < bricks[r].length; c++) {
+                    let b = bricks[r][c];
+                    if (b.status === 1) {
+                        activeBricksFound = true;
+                        
+                        // Bounding collision checks
+                        if (ball.x + ball.radius > b.x && ball.x - ball.radius < b.x + brickConfig.width &&
+                            ball.y + ball.radius > b.y && ball.y - ball.radius < b.y + brickConfig.height) {
+                            
+                            ball.speedY *= -1;
+                            b.status = 0; // Shattered block
+                            score += 10;
+                            updateHeaderUI();
+                        }
+                    }
+                }
+            }
+
+            // 7. Complete Stage Condition Verification
+            if (!activeBricksFound && gameActive) {
+                currentLevel++;
+                if (currentLevel > maxLevels) {
+                    triggerGameOver(true);
+                } else {
+                    triggerLevelIntermission();
+                }
+            }
+        }
+
+        // --- Interface Control Overrides ---
+        function triggerLevelIntermission() {
+            isPaused = true;
+            overlayTitle.innerText = "STAGE CLEARED!";
+            overlayDesc.innerText = `Outstanding work! Prepare your reflexes for Stage ${currentLevel}: "${levelLayouts[currentLevel].name}"`;
+            overlayBtn.innerText = `LAUNCH STAGE ${currentLevel}`;
+            overlay.style.display = 'flex';
+        }
+
+        function triggerGameOver(victoryIsAchieved) {
+            isPaused = true;
+            gameActive = false;
+            
+            if (victoryIsAchieved) {
+                overlayTitle.innerText = "🏆 GRAND CHAMPION!";
+                overlayDesc.innerText = `Incredible performance! You shattered every fortress layout.\nFinal Score: ${score}`;
+                overlayBtn.innerText = "PLAY AGAIN";
+            } else {
+                overlayTitle.innerText = "GAME OVER";
+                overlayDesc.innerText = `The ball fell through the platform defenses.\nFinal Score reached: ${score}`;
+                overlayBtn.innerText = "TRY AGAIN";
+            }
+            overlay.style.display = 'flex';
+        }
+
+        // --- Render Pipelines Graphic Draw States ---
+        function drawPipeline() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Paddle platform
+            ctx.fillStyle = '#0ea5e9';
+            ctx.shadowBlur = 4;
+            ctx.shadowColor = '#0ea5e9';
+            ctx.fillRect(paddle.x, paddle.y, paddle.width, paddle.height);
+            ctx.shadowBlur = 0; // Reset canvas glow states for blocks
+
+            // Draw Active Brick Structures
+            for (let r = 0; r < bricks.length; r++) {
+                for (let c = 0; c < bricks[r].length; c++) {
+                    let b = bricks[r][c];
+                    if (b.status === 1) {
+                        let brickX = (c * (brickConfig.width + brickConfig.padding)) + brickConfig.offsetLeft;
+                        let brickY = (r * (brickConfig.height + brickConfig.padding)) + brickConfig.offsetTop;
+                        b.x = brickX;
+                        b.y = brickY;
+                        
+                        ctx.fillStyle = b.color;
+                        ctx.fillRect(brickX, brickY, brickConfig.width, brickConfig.height);
+                        
+                        // Bevel highlight border lines inside blocks
+                        ctx.strokeStyle = "rgba(255,255,255,0.2)";
+                        ctx.strokeRect(brickX, brickY, brickConfig.width, brickConfig.height);
+                    }
+                }
+            }
+
+            // Draw Energy Ball element
+            ctx.fillStyle = '#f8fafc';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // --- Main Frame Engine Ticks ---
+        function frameTickLoop() {
+            updatePhysics();
+            drawPipeline();
+            requestAnimationFrame(frameTickLoop);
+        }
+
+        // Instantly prime layout visual arrays
+        frameTickLoop();
+    </script>
+</body>
+</html>

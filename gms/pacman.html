@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Pac-Man: Retro Maze</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #030712;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 360px;
+        }
+
+        header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            background: #0f172a;
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+            font-weight: bold;
+            font-size: 0.95rem;
+            margin-bottom: 10px;
+        }
+
+        .score-hl { color: #facc15; }
+        .lives-hl { color: #ef4444; }
+
+        #canvas-container {
+            position: relative;
+            background: #000;
+            border: 4px solid #1d4ed8;
+            border-radius: 12px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.8);
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 7, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        #overlay h2 {
+            font-size: 2.2rem;
+            color: #facc15;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        button {
+            background: #facc15;
+            color: #030712;
+            border: none;
+            padding: 12px 28px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #ca8a04;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #ca8a04;
+        }
+
+        #mobile-controller {
+            display: none;
+            margin-top: 15px;
+            position: relative;
+            width: 140px;
+            height: 140px;
+        }
+
+        .dpad-btn {
+            position: absolute;
+            background: #1e293b;
+            border: 2px solid #334155;
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 8px;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #0f172a;
+            touch-action: manipulation;
+        }
+        .dpad-btn:active {
+            background: #facc15;
+            color: #030712;
+        }
+
+        #btn-up    { top: 0; left: 48px; }
+        #btn-left  { top: 48px; left: 0; }
+        #btn-right { top: 48px; right: 0; }
+        #btn-down  { bottom: 0; left: 48px; }
+
+        @media (max-width: 768px), (pointer: coarse) {
+            #mobile-controller { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <header>
+            <div>SCORE: <span id="lbl-score" class="score-hl">0</span></div>
+            <div>LIVES: <span id="lbl-lives" class="lives-hl">❤❤❤</span></div>
+        </header>
+
+        <div id="canvas-container">
+            <canvas id="pacmanCanvas" width="360" height="360"></canvas>
+            
+            <div id="overlay">
+                <h2 id="overlay-title">PAC-MAN ARCADE</h2>
+                <p id="overlay-desc" style="font-size:0.85rem; color:#9ca3af; margin-bottom:20px;">Clear all golden pellets! Snag flashing Energizers to vulnerable-hunt ghosts.</p>
+                <button onclick="startGame()">WAKA WAKA</button>
+            </div>
+        </div>
+
+        <div id="mobile-controller">
+            <button class="dpad-btn" id="btn-up" data-dir="UP">▲</button>
+            <button class="dpad-btn" id="btn-left" data-dir="LEFT">◀</button>
+            <button class="dpad-btn" id="btn-right" data-dir="RIGHT">▶</button>
+            <button class="dpad-btn" id="btn-down" data-dir="DOWN">▼</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('pacmanCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const lblScore = document.getElementById('lbl-score');
+        const lblLives = document.getElementById('lbl-lives');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        const TILE_COUNT = 15;
+        const TILE_SIZE = canvas.width / TILE_COUNT;
+
+        const mazeMap = [
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,3,0,0,0,0,0,1,0,0,0,0,0,3,1],
+            [1,0,1,1,0,1,0,1,0,1,0,1,1,0,1],
+            [1,0,1,1,0,1,0,0,0,1,0,1,1,0,1],
+            [1,0,0,0,0,1,1,2,1,1,0,0,0,0,1],
+            [1,0,1,1,0,0,0,2,0,0,0,1,1,0,1],
+            [1,0,0,0,0,1,0,1,0,1,0,0,0,0,1],
+            [1,1,1,0,1,1,0,1,0,1,1,0,1,1,1],
+            [1,0,0,0,0,1,0,0,0,1,0,0,0,0,1],
+            [1,0,1,1,0,0,0,2,0,0,0,1,1,0,1],
+            [1,0,0,0,0,1,1,2,1,1,0,0,0,0,1],
+            [1,0,1,1,0,1,0,0,0,1,0,1,1,0,1],
+            [1,0,1,1,0,1,0,1,0,1,0,1,1,0,1],
+            [1,3,0,0,0,0,0,1,0,0,0,0,0,3,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+        ];
+
+        let currentGridState = [];
+        let score = 0;
+        let lives = 3;
+        let gameActive = false;
+        
+        let frightenedTimer = 0;
+        let frightenedMode = false;
+
+        const pacman = { gridX: 7, gridY: 8, dirX: 0, dirY: 0, nextDirX: 0, nextDirY: 0 };
+        let ghosts = [];
+
+        function startGame() {
+            score = 0; lives = 3;
+            currentGridState = JSON.parse(JSON.stringify(mazeMap));
+            
+            resetPositions();
+            updateUI();
+            
+            overlay.style.display = 'none';
+            gameActive = true;
+            lastMoveTime = performance.now(); // Instantly synchronize loop metrics
+        }
+
+        function resetPositions() {
+            pacman.gridX = 7; pacman.gridY = 8;
+            pacman.dirX = 0; pacman.dirY = 0;
+            pacman.nextDirX = 0; pacman.nextDirY = 0;
+
+            ghosts = [
+                { gridX: 7, gridY: 4, color: '#ef4444', dirX: 1, dirY: 0 },
+                { gridX: 6, gridY: 5, color: '#f472b6', dirX: -1, dirY: 0 },
+                { gridX: 8, gridY: 5, color: '#22d3ee', dirX: 0, dirY: -1 }
+            ];
+            frightenedMode = false;
+            frightenedTimer = 0;
+        }
+
+        function updateUI() {
+            lblScore.innerText = score;
+            lblLives.innerText = "❤".repeat(lives);
+        }
+
+        let lastMoveTime = 0;
+        const moveInterval = 220; // Slightly tuned up movement speed for smoother responses
+
+        function updatePhysics(timestamp) {
+            if (!gameActive) return;
+
+            const delta = timestamp - lastMoveTime;
+
+            if (delta >= moveInterval) {
+                lastMoveTime = timestamp;
+
+                if (frightenedMode) {
+                    frightenedTimer--;
+                    if (frightenedTimer <= 0) frightenedMode = false;
+                }
+
+                if (isValidMove(pacman.gridX + pacman.nextDirX, pacman.gridY + pacman.nextDirY)) {
+                    pacman.dirX = pacman.nextDirX;
+                    pacman.dirY = pacman.nextDirY;
+                }
+
+                let targetX = pacman.gridX + pacman.dirX;
+                let targetY = pacman.gridY + pacman.dirY;
+
+                if (isValidMove(targetX, targetY)) {
+                    pacman.gridX = targetX;
+                    pacman.gridY = targetY;
+                }
+
+                let standingTile = currentGridState[pacman.gridY][pacman.gridX];
+                if (standingTile === 0) {
+                    currentGridState[pacman.gridY][pacman.gridX] = 2;
+                    score += 10;
+                    updateUI();
+                    checkVictoryCondition();
+                } else if (standingTile === 3) {
+                    currentGridState[pacman.gridY][pacman.gridX] = 2;
+                    score += 50;
+                    frightenedMode = true;
+                    frightenedTimer = 30;
+                    updateUI();
+                }
+
+                ghosts.forEach(g => {
+                    let openDirections = [];
+                    const possibleDirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
+
+                    possibleDirs.forEach(d => {
+                        if (d.x === -g.dirX && d.y === -g.dirY) return;
+                        if (isValidMove(g.gridX + d.x, g.gridY + d.y)) {
+                            openDirections.push(d);
+                        }
+                    });
+
+                    if (openDirections.length === 0) {
+                        if (isValidMove(g.gridX - g.dirX, g.gridY - g.dirY)) {
+                            openDirections.push({ x: -g.dirX, y: -g.dirY });
+                        }
+                    }
+
+                    if (openDirections.length > 0) {
+                        let selectedDir = openDirections[Math.floor(Math.random() * openDirections.length)];
+                        g.dirX = selectedDir.x;
+                        g.dirY = selectedDir.y;
+                    }
+
+                    g.gridX += g.dirX;
+                    g.gridY += g.dirY;
+                });
+
+                evaluateIntersections();
+            }
+        }
+
+        function isValidMove(x, y) {
+            if (x < 0 || x >= TILE_COUNT || y < 0 || y >= TILE_COUNT) return false;
+            return currentGridState[y][x] !== 1;
+        }
+
+        function evaluateIntersections() {
+            ghosts.forEach((g, idx) => {
+                if (g.gridX === pacman.gridX && g.gridY === pacman.gridY) {
+                    if (frightenedMode) {
+                        ghosts[idx] = { gridX: 7, gridY: 5, color: g.color, dirX: 0, dirY: -1 };
+                        score += 200;
+                        updateUI();
+                    } else {
+                        triggerPlayerDeath();
+                    }
+                }
+            });
+        }
+
+        function checkVictoryCondition() {
+            let dynamicDotsLeft = currentGridState.some(row => row.includes(0) || row.includes(3));
+            if (!dynamicDotsLeft) {
+                gameActive = false;
+                overlayTitle.innerText = "🏆 CHAMPION!";
+                overlayDesc.innerText = `Sensational! You cleared the entire maze.\nFinal Score: ${score}`;
+                overlay.style.display = 'flex';
+            }
+        }
+
+        function triggerPlayerDeath() {
+            lives--;
+            updateUI();
+            if (lives <= 0) {
+                gameActive = false;
+                overlayTitle.innerText = "GAME OVER";
+                overlayDesc.innerText = `The ghosts caught you.\nFinal Score: ${score}`;
+                overlay.style.display = 'flex';
+            } else {
+                resetPositions();
+            }
+        }
+
+        function queueDirection(x, y) {
+            pacman.nextDirX = x;
+            pacman.nextDirY = y;
+            if (pacman.dirX === 0 && pacman.dirY === 0) {
+                pacman.dirX = x; pacman.dirY = y;
+            }
+        }
+
+        function drawScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let r = 0; r < TILE_COUNT; r++) {
+                for (let c = 0; c < TILE_COUNT; c++) {
+                    let cell = currentGridState[r][c];
+                    let xPos = c * TILE_SIZE;
+                    let yPos = r * TILE_SIZE;
+
+                    if (cell === 1) {
+                        ctx.fillStyle = '#1e3a8a';
+                        ctx.fillRect(xPos, yPos, TILE_SIZE, TILE_SIZE);
+                        ctx.strokeStyle = '#1d4ed8';
+                        ctx.strokeRect(xPos + 2, yPos + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+                    } else if (cell === 0) {
+                        ctx.fillStyle = '#fef08a';
+                        ctx.beginPath();
+                        ctx.arc(xPos + TILE_SIZE/2, yPos + TILE_SIZE/2, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (cell === 3) {
+                        ctx.fillStyle = '#fbbf24';
+                        ctx.beginPath();
+                        ctx.arc(xPos + TILE_SIZE/2, yPos + TILE_SIZE/2, 6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            ghosts.forEach(g => {
+                ctx.fillStyle = frightenedMode ? '#1e1b4b' : g.color;
+                let gx = g.gridX * TILE_SIZE + TILE_SIZE/2;
+                let gy = g.gridY * TILE_SIZE + TILE_SIZE/2;
+                
+                ctx.beginPath();
+                ctx.arc(gx, gy, TILE_SIZE/2 - 2, Math.PI, 0, false);
+                ctx.lineTo(gx + TILE_SIZE/2 - 2, gy + TILE_SIZE/2 - 2);
+                ctx.lineTo(gx - TILE_SIZE/2 + 2, gy + TILE_SIZE/2 - 2);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(gx - 5, gy - 4, 3, 3);
+                ctx.fillRect(gx + 2, gy - 4, 3, 3);
+            });
+
+            ctx.fillStyle = '#facc15';
+            let px = pacman.gridX * TILE_SIZE + TILE_SIZE/2;
+            let py = pacman.gridY * TILE_SIZE + TILE_SIZE/2;
+
+            ctx.beginPath();
+            ctx.arc(px, py, TILE_SIZE/2 - 2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        window.addEventListener('keydown', e => {
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') queueDirection(0, -1);
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') queueDirection(0, 1);
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') queueDirection(-1, 0);
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') queueDirection(1, 0);
+        });
+
+        document.querySelectorAll('.dpad-btn').forEach(btn => {
+            const mapRouter = (e) => {
+                e.preventDefault();
+                let directionMarker = btn.getAttribute('data-dir');
+                if (directionMarker === 'UP') queueDirection(0, -1);
+                if (directionMarker === 'DOWN') queueDirection(0, 1);
+                if (directionMarker === 'LEFT') queueDirection(-1, 0);
+                if (directionMarker === 'RIGHT') queueDirection(1, 0);
+            };
+            btn.addEventListener('touchstart', mapRouter);
+            btn.addEventListener('mousedown', mapRouter);
+        });
+
+        // Pre-render map pattern before game launch
+        currentGridState = JSON.parse(JSON.stringify(mazeMap));
+        drawScene();
+
+        function engineTick(timestamp) {
+            updatePhysics(timestamp);
+            drawScene();
+            requestAnimationFrame(engineTick);
+        }
+
+        requestAnimationFrame(engineTick);
+    </script>
+</body>
+</html>

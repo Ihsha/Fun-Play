@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Arcade Tetris: Championship Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0b0f19;
+            color: #f3f4f6;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 460px;
+        }
+
+        /* Layout Grid holding Sidebar - Board - Sidebar */
+        #main-layout {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 85px;
+        }
+
+        .meta-box {
+            background: #111827;
+            border: 2px solid #374151;
+            border-radius: 8px;
+            padding: 8px;
+            text-align: center;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        .meta-box span {
+            display: block;
+            font-size: 1.1rem;
+            color: #38bdf8;
+            margin-top: 4px;
+        }
+
+        /* Tiny mini-canvases for Hold/Next pieces */
+        .preview-canvas {
+            background: #030712;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            margin-top: 5px;
+            display: block;
+        }
+
+        /* Core Tetris Board Arena */
+        #arena-container {
+            position: relative;
+            background: #030712;
+            border: 4px solid #4b5563;
+            border-radius: 12px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.7);
+            width: 240px;
+            aspect-ratio: 1 / 2;
+        }
+
+        canvas#tetrisCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Game Over HUD Window */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(3, 7, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            border-radius: 8px;
+            padding: 15px;
+            z-index: 10;
+        }
+
+        #overlay h2 {
+            font-size: 1.8rem;
+            color: #ef4444;
+            margin-bottom: 10px;
+        }
+
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 22px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 4px 0 #047857;
+        }
+        button:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #047857;
+        }
+
+        /* --- SMART MOBILE TOUCH CONTROLLER --- */
+        #mobile-controller {
+            display: none; /* Evaluated below */
+            width: 100%;
+            margin-top: 15px;
+        }
+
+        .control-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .ctrl-btn {
+            background: #1f2937;
+            border: 2px solid #4b5563;
+            color: white;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 3px 0 #374151;
+            touch-action: manipulation;
+        }
+
+        .ctrl-btn:active {
+            background: #38bdf8;
+            color: #0b0f19;
+            transform: translateY(2px);
+            box-shadow: 0 1px 0 #374151;
+        }
+
+        /* Utility sizing layouts */
+        .w-normal { width: 55px; }
+        .w-wide   { width: 110px; }
+        .w-full   { width: 230px; }
+
+        @media (max-width: 768px), (pointer: coarse) {
+            #mobile-controller { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <div id="main-layout">
+            <div class="side-panel">
+                <div class="meta-box">
+                    HOLD
+                    <canvas id="holdCanvas" class="preview-canvas" width="64" height="64"></canvas>
+                </div>
+                <div class="meta-box">LEVEL<span id="lbl-level">1</span></div>
+            </div>
+
+            <div id="arena-container">
+                <canvas id="tetrisCanvas" width="240" height="480"></canvas>
+                
+                <div id="overlay">
+                    <h2 id="overlay-title">TETRIS</h2>
+                    <p id="overlay-desc" style="font-size:0.85rem; margin-bottom:15px; color:#9ca3af;">Press Space or tap button to play</p>
+                    <button onclick="initGame()">PLAY</button>
+                </div>
+            </div>
+
+            <div class="side-panel">
+                <div class="meta-box">
+                    NEXT
+                    <canvas id="nextCanvas" class="preview-canvas" width="64" height="64"></canvas>
+                </div>
+                <div class="meta-box">SCORE<span id="lbl-score">0</span></div>
+            </div>
+        </div>
+
+        <div id="mobile-controller">
+            <div class="control-row">
+                <button class="ctrl-btn w-wide" data-action="HOLD">HOLD</button>
+                <button class="ctrl-btn w-wide" data-action="ROTATE">ROTATE ↻</button>
+            </div>
+            <div class="control-row">
+                <button class="ctrl-btn w-normal" data-action="LEFT">◀</button>
+                <button class="ctrl-btn w-normal" data-action="DOWN">▼</button>
+                <button class="ctrl-btn w-normal" data-action="RIGHT">▶</button>
+            </div>
+            <div class="control-row">
+                <button class="ctrl-btn w-full" data-action="DROP">⚡ HARD DROP ⚡</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('tetrisCanvas');
+        const ctx = canvas.getContext('2d');
+        const holdCanvas = document.getElementById('holdCanvas');
+        const hCtx = holdCanvas.getContext('2d');
+        const nextCanvas = document.getElementById('nextCanvas');
+        const nCtx = nextCanvas.getContext('2d');
+
+        const lblScore = document.getElementById('lbl-score');
+        const lblLevel = document.getElementById('lbl-level');
+        const overlay = document.getElementById('overlay');
+        const overlayTitle = document.getElementById('overlay-title');
+        const overlayDesc = document.getElementById('overlay-desc');
+
+        // Grid parameters Matrix definitions
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 24;
+
+        let grid = [];
+        let score = 0;
+        let linesClearedTotal = 0;
+        let level = 1;
+        let gameActive = false;
+        let dropIntervalId = null;
+        let dropSpeed = 800; 
+        let canSwapHold = true;
+
+        // Shape Matrix Profiles & Color Mappings
+        const SHAPES = {
+            I: { color: '#06b6d4', matrix: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]] },
+            J: { color: '#3b82f6', matrix: [[1,0,0],[1,1,1],[0,0,0]] },
+            L: { color: '#f97316', matrix: [[0,0,1],[1,1,1],[0,0,0]] },
+            O: { color: '#eab308', matrix: [[1,1],[1,1]] },
+            S: { color: '#22c55e', matrix: [[0,1,1],[1,1,0],[0,0,0]] },
+            Z: { color: '#ef4444', matrix: [[1,1,0],[0,1,1],[0,0,0]] },
+            T: { color: '#a855f7', matrix: [[0,1,0],[1,1,0],[1,0,0]] } // Corrected standard base matrix alignment layout
+        };
+        // Quick override repair patch on T shape layout mapping vector matrix consistency
+        SHAPES.T.matrix = [[0,1,0],[1,1,1],[0,0,0]];
+
+        const SHAPE_KEYS = Object.keys(SHAPES);
+
+        let currentPiece = null;
+        let nextPieceKey = '';
+        let holdPieceKey = '';
+
+        function initGame() {
+            grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(0));
+            score = 0; linesClearedTotal = 0; level = 1;
+            lblScore.innerText = score; lblLevel.innerText = level;
+            holdPieceKey = '';
+            nextPieceKey = SHAPE_KEYS[Math.floor(Math.random() * SHAPE_KEYS.length)];
+            
+            overlay.style.display = 'none';
+            gameActive = true;
+            canSwapHold = true;
+
+            spawnPiece();
+            runGameLoop();
+        }
+
+        function runGameLoop() {
+            clearInterval(dropIntervalId);
+            dropSpeed = Math.max(100, 900 - (level * 85));
+            dropIntervalId = setInterval(() => {
+                if (gameActive) movePiece(0, 1);
+            }, dropSpeed);
+        }
+
+        function spawnPiece() {
+            currentPiece = {
+                key: nextPieceKey,
+                matrix: JSON.parse(JSON.stringify(SHAPES[nextPieceKey].matrix)),
+                color: SHAPES[nextPieceKey].color,
+                x: Math.floor((COLS - SHAPES[nextPieceKey].matrix[0].length) / 2),
+                y: -1
+            };
+
+            nextPieceKey = SHAPE_KEYS[Math.floor(Math.random() * SHAPE_KEYS.length)];
+            
+            // Check instant block collision (Game Over)
+            if (checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y)) {
+                triggerGameOver();
+            }
+
+            canSwapHold = true;
+            renderPreviews();
+        }
+
+        function checkCollision(matrix, offsetX, offsetY) {
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < matrix[r].length; c++) {
+                    if (matrix[r][c] !== 0) {
+                        let targetX = offsetX + c;
+                        let targetY = offsetY + r;
+
+                        if (targetX < 0 || targetX >= COLS || targetY >= ROWS) return true;
+                        if (targetY >= 0 && grid[targetY][targetX] !== 0) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        function lockPiece() {
+            for (let r = 0; r < currentPiece.matrix.length; r++) {
+                for (let c = 0; c < currentPiece.matrix[r].length; c++) {
+                    if (currentPiece.matrix[r][c] !== 0) {
+                        if (currentPiece.y + r >= 0) {
+                            grid[currentPiece.y + r][currentPiece.x + c] = currentPiece.color;
+                        }
+                    }
+                }
+            }
+            clearLines();
+            spawnPiece();
+        }
+
+        function movePiece(dirX, dirY) {
+            currentPiece.x += dirX;
+            currentPiece.y += dirY;
+            if (checkCollision(currentPiece.matrix, currentPiece.x, currentPiece.y)) {
+                currentPiece.x -= dirX;
+                currentPiece.y -= dirY;
+                if (dirY > 0) {
+                    lockPiece();
+                }
+                return false;
+            }
+            drawScene();
+            return true;
+        }
+
+        function instantDrop() {
+            while (movePiece(0, 1)) {}
+        }
+
+        function rotatePiece() {
+            const matrix = currentPiece.matrix;
+            const N = matrix.length;
+            // Create rotated transpose matrix
+            let rotated = Array(N).fill(null).map(() => Array(N).fill(0));
+            for (let r = 0; r < N; r++) {
+                for (let c = 0; c < N; c++) {
+                    rotated[c][N - 1 - r] = matrix[r][c];
+                }
+            }
+
+            // Wall kick checks adjustment
+            let originX = currentPiece.x;
+            if (!checkCollision(rotated, currentPiece.x, currentPiece.y)) {
+                currentPiece.matrix = rotated;
+            } else if (!checkCollision(rotated, currentPiece.x - 1, currentPiece.y)) {
+                currentPiece.x -= 1;
+                currentPiece.matrix = rotated;
+            } else if (!checkCollision(rotated, currentPiece.x + 1, currentPiece.y)) {
+                currentPiece.x += 1;
+                currentPiece.matrix = rotated;
+            } else {
+                // Cant rotate position invalid
+                return;
+            }
+            drawScene();
+        }
+
+        function triggerHold() {
+            if (!canSwapHold) return;
+            canSwapHold = false;
+
+            const currentKey = currentPiece.key;
+            if (holdPieceKey === '') {
+                holdPieceKey = currentKey;
+                spawnPiece();
+            } else {
+                const temp = holdPieceKey;
+                holdPieceKey = currentKey;
+                nextPieceKey = temp; // Feed back into generator loop mechanics safely
+                spawnPiece();
+            }
+            renderPreviews();
+            drawScene();
+        }
+
+        function clearLines() {
+            let linesClearedThisTurn = 0;
+            
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (grid[r].every(cell => cell !== 0)) {
+                    grid.splice(r, 1);
+                    grid.unshift(Array(COLS).fill(0));
+                    linesClearedThisTurn++;
+                    r++; // Match structural indices shifts down
+                }
+            }
+
+            if (linesClearedThisTurn > 0) {
+                linesClearedTotal += linesClearedThisTurn;
+                // Tetris arcade scale progression scoring matrix setup
+                const scores = [0, 100, 300, 500, 800];
+                score += scores[Math.min(linesClearedThisTurn, 4)] * level;
+                level = Math.floor(linesClearedTotal / 10) + 1;
+
+                lblScore.innerText = score;
+                lblLevel.innerText = level;
+                runGameLoop();
+            }
+        }
+
+        function triggerGameOver() {
+            gameActive = false;
+            clearInterval(dropIntervalId);
+            overlayTitle.innerText = "GAME OVER";
+            overlayDesc.innerText = `Final Score achieved: ${score}`;
+            overlay.style.display = 'flex';
+        }
+
+        // --- GRAPHICS RENDERING METHODS ---
+        function drawScene() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw static grid lock arena matrix elements
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (grid[r][c] !== 0) {
+                        drawBlock(ctx, c, r, grid[r][c]);
+                    }
+                }
+            }
+
+            // 2. Draw active piece tracking components
+            if (currentPiece) {
+                for (let r = 0; r < currentPiece.matrix.length; r++) {
+                    for (let c = 0; c < currentPiece.matrix[r].length; c++) {
+                        if (currentPiece.matrix[r][c] !== 0) {
+                            if (currentPiece.y + r >= 0) {
+                                drawBlock(ctx, currentPiece.x + c, currentPiece.y + r, currentPiece.color);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        function drawBlock(context, x, y, color) {
+            context.fillStyle = color;
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+            // Dynamic highlights borders inside vector shapes
+            context.fillStyle = 'rgba(255,255,255,0.15)';
+            context.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, 4);
+        }
+
+        function renderPreviews() {
+            // Clear mini HUD canvas frames
+            hCtx.clearRect(0, 0, holdCanvas.width, holdCanvas.height);
+            nCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+
+            if (holdPieceKey) renderMiniature(hCtx, holdPieceKey);
+            if (nextPieceKey) renderMiniature(nCtx, nextPieceKey);
+        }
+
+        function renderMiniature(context, key) {
+            const matrix = SHAPES[key].matrix;
+            const color = SHAPES[key].color;
+            const size = 12; // Static scale down size inside boxes
+            
+            // Re-offset bounding centering elements variables logic
+            const offsetX = (64 - (matrix[0].length * size)) / 2;
+            const offsetY = (64 - (matrix.length * size)) / 2;
+
+            for (let r = 0; r < matrix.length; r++) {
+                for (let c = 0; c < matrix[r].length; c++) {
+                    if (matrix[r][c] !== 0) {
+                        context.fillStyle = color;
+                        context.fillRect(offsetX + c * size, offsetY + r * size, size - 1, size - 1);
+                    }
+                }
+            }
+        }
+
+        // --- COMMAND ROUTING ROUTINES ---
+        function executeAction(action) {
+            if (!gameActive) return;
+            if (action === 'LEFT') movePiece(-1, 0);
+            if (action === 'RIGHT') movePiece(1, 0);
+            if (action === 'DOWN') movePiece(0, 1);
+            if (action === 'ROTATE') rotatePiece();
+            if (action === 'HOLD') triggerHold();
+            if (action === 'DROP') instantDrop();
+        }
+
+        // Desktop Keyboard hooks Map
+        window.addEventListener('keydown', e => {
+            if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+                e.preventDefault();
+            }
+            if (!gameActive && e.code === 'Space') { initGame(); return; }
+            
+            if (e.code === 'ArrowLeft' || e.code === 'KeyA') executeAction('LEFT');
+            if (e.code === 'ArrowRight' || e.code === 'KeyD') executeAction('RIGHT');
+            if (e.code === 'ArrowDown' || e.code === 'KeyS') executeAction('DOWN');
+            if (e.code === 'ArrowUp' || e.code === 'KeyW') executeAction('ROTATE');
+            if (e.code === 'ShiftLeft' || e.code === 'KeyC') executeAction('HOLD');
+            if (e.code === 'Space') executeAction('DROP');
+        });
+
+        // Touch Interaction Mapping
+        document.querySelectorAll('.ctrl-btn').forEach(btn => {
+            const router = (e) => {
+                e.preventDefault();
+                executeAction(btn.getAttribute('data-action'));
+            };
+            btn.addEventListener('touchstart', router);
+            btn.addEventListener('mousedown', router);
+        });
+
+        // Bootstrap Initial Drawing Matrix Graphics frame state
+        drawScene();
+    </script>
+</body>
+</html>

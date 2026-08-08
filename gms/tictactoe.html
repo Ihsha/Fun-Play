@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe: vs AI Minimax</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        #game-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 340px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #38bdf8;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+
+        #status-lbl {
+            font-size: 1.1rem;
+            color: #94a3b8;
+            margin-bottom: 20px;
+            font-weight: 600;
+            text-align: center;
+            min-height: 1.6rem;
+        }
+
+        /* The 3x3 Arena Grid Layout */
+        #board-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 10px;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 12px;
+            border: 2px solid #334155;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            margin-bottom: 20px;
+        }
+
+        /* Grid Square Cell Design */
+        .cell {
+            background: #0f172a;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.8rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .cell:hover {
+            background: #1e293b;
+        }
+
+        .cell:active {
+            transform: scale(0.96);
+        }
+
+        /* Color profiles for X and O tokens */
+        .cell.x-token {
+            color: #38bdf8; /* Vibrant Sky Blue */
+        }
+
+        .cell.o-token {
+            color: #f43f5e; /* Radiant Rose Red */
+        }
+
+        .cell.disabled {
+            pointer-events: none; /* Stops clicking occupied spaces */
+        }
+
+        /* Control Reset Action Bar */
+        button {
+            background: #0ea5e9;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.2s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+
+        button:hover {
+            background: #0284c7;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <h1>TIC-TAC-TOE</h1>
+        <div id="status-lbl">Your turn (Player X)</div>
+
+        <div id="board-grid">
+            <div class="cell" data-index="0"></div>
+            <div class="cell" data-index="1"></div>
+            <div class="cell" data-index="2"></div>
+            <div class="cell" data-index="3"></div>
+            <div class="cell" data-index="4"></div>
+            <div class="cell" data-index="5"></div>
+            <div class="cell" data-index="6"></div>
+            <div class="cell" data-index="7"></div>
+            <div class="cell" data-index="8"></div>
+        </div>
+
+        <button onclick="resetGame()">RESET GAME</button>
+    </div>
+
+    <script>
+        const cells = document.querySelectorAll('.cell');
+        const statusLbl = document.getElementById('status-lbl');
+
+        // Logic Markers
+        const HUMAN = 'X';
+        const AI = 'O';
+        let currentBoard = ["", "", "", "", "", "", "", "", ""];
+        let gameIsActive = true;
+
+        // Vector Array of all possible winning alignments
+        const winPatterns = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8], // Rows
+            [0, 3, 6], [1, 4, 7], [2, 5, 8], // Columns
+            [0, 4, 8], [2, 4, 6]             // Diagonals
+        ];
+
+        // Assign Event Listeners
+        cells.forEach(cell => {
+            cell.addEventListener('click', () => handleHumanTurn(cell));
+        });
+
+        function handleHumanTurn(cell) {
+            const index = parseInt(cell.getAttribute('data-index'));
+
+            if (currentBoard[index] !== "" || !gameIsActive) return;
+
+            // Execute move
+            makeMove(index, HUMAN);
+
+            if (!checkImmediateGameStatus()) {
+                // If the game didn't finish, hand control over to the AI agent
+                statusLbl.innerText = "AI is thinking...";
+                gameIsActive = false; // Temporarily lock interaction clicks
+                setTimeout(handleAiTurn, 400); // Artificial buffer delay for game feel
+            }
+        }
+
+        function handleAiTurn() {
+            // Find the perfect move using minimax
+            let bestMoveIndex = findBestMove(currentBoard);
+            
+            makeMove(bestMoveIndex, AI);
+            gameIsActive = true;
+
+            if (!checkImmediateGameStatus()) {
+                statusLbl.innerText = "Your turn (Player X)";
+            }
+        }
+
+        function makeMove(index, player) {
+            currentBoard[index] = player;
+            cells[index].innerText = player;
+            cells[index].classList.add(player === HUMAN ? 'x-token' : 'o-token');
+            cells[index].classList.add('disabled');
+        }
+
+        function checkImmediateGameStatus() {
+            if (evaluateWinner(currentBoard, HUMAN)) {
+                statusLbl.innerText = "🎉 You Win! (Impossible)";
+                gameIsActive = false;
+                return true;
+            }
+            if (evaluateWinner(currentBoard, AI)) {
+                statusLbl.innerText = "🤖 AI Wins! Game Over.";
+                gameIsActive = false;
+                return true;
+            }
+            if (!currentBoard.includes("")) {
+                statusLbl.innerText = "🤝 It's a perfect Draw!";
+                gameIsActive = false;
+                return true;
+            }
+            return false;
+        }
+
+        // --- Minimax Core Decision Engine ---
+        function findBestMove(board) {
+            let bestScore = -Infinity;
+            let moveIndex = -1;
+
+            for (let i = 0; i < board.length; i++) {
+                if (board[i] === "") {
+                    board[i] = AI; // Simulation placement
+                    let score = minimax(board, 0, false);
+                    board[i] = ""; // Revert placement
+
+                    if (score > bestScore) {
+                        bestScore = score;
+                        moveIndex = i;
+                    }
+                }
+            }
+            return moveIndex;
+        }
+
+        function minimax(board, depth, isMaximizing) {
+            // Base evaluation markers for scoring terminal game-tree leaves
+            if (evaluateWinner(board, AI)) return 10 - depth;
+            if (evaluateWinner(board, HUMAN)) return depth - 10;
+            if (!board.includes("")) return 0;
+
+            if (isMaximizing) {
+                let bestScore = -Infinity;
+                for (let i = 0; i < board.length; i++) {
+                    if (board[i] === "") {
+                        board[i] = AI;
+                        let score = minimax(board, depth + 1, false);
+                        board[i] = "";
+                        bestScore = Math.max(score, bestScore);
+                    }
+                }
+                return bestScore;
+            } else {
+                let bestScore = Infinity;
+                for (let i = 0; i < board.length; i++) {
+                    if (board[i] === "") {
+                        board[i] = HUMAN;
+                        let score = minimax(board, depth + 1, true);
+                        board[i] = "";
+                        bestScore = Math.min(score, bestScore);
+                    }
+                }
+                return bestScore;
+            }
+        }
+
+        function evaluateWinner(board, player) {
+            return winPatterns.some(pattern => {
+                return pattern.every(index => board[index] === player);
+            });
+        }
+
+        // --- State Resets ---
+        function resetGame() {
+            currentBoard = ["", "", "", "", "", "", "", "", ""];
+            gameIsActive = true;
+            statusLbl.innerText = "Your turn (Player X)";
+            
+            cells.forEach(cell => {
+                cell.innerText = "";
+                cell.className = "cell"; // Drops active custom asset classes cleanly
+            });
+        }
+    </script>
+</body>
+</html>

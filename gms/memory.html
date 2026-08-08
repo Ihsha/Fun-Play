@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ultimate Memory Match: 10 Levels</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+        }
+
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        #game-header {
+            text-align: center;
+            margin-bottom: 15px;
+            width: 100%;
+            max-width: 650px;
+        }
+
+        h1 {
+            font-size: 2rem;
+            color: #38bdf8;
+            margin-bottom: 5px;
+        }
+
+        #stats-bar {
+            display: flex;
+            justify-content: space-between;
+            background: #1e293b;
+            padding: 12px 20px;
+            border-radius: 8px;
+            border: 1px solid #334155;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .highlight {
+            color: #f43f5e;
+        }
+        .timer-highlight {
+            color: #10b981;
+        }
+
+        /* Responsive Grid Container */
+        #grid-container {
+            display: grid;
+            gap: 6px;
+            background: #1e293b;
+            padding: 10px;
+            border-radius: 12px;
+            border: 2px solid #475569;
+            width: 100%;
+            max-width: 650px;
+            aspect-ratio: 1 / 1;
+            margin-bottom: 20px;
+        }
+
+        /* 3D Card Flip Mechanics */
+        .card {
+            perspective: 1000px;
+            cursor: pointer;
+            aspect-ratio: 1 / 1;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.4s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            font-weight: bold;
+            /* Auto scaling text size based on grid size dynamically using inline-js */
+            font-size: var(--card-font-size, 1.5rem); 
+        }
+
+        /* Card Back Cover Face */
+        .card-back {
+            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+            border: 1px solid #0ea5e9;
+            color: #fff;
+        }
+
+        /* Card Front Visual Face */
+        .card-front {
+            background-color: #f1f5f9;
+            color: #0f172a;
+            transform: rotateY(180deg);
+            border: 1px solid #cbd5e1;
+        }
+
+        /* State Modifiers */
+        .card.matched {
+            pointer-events: none;
+            opacity: 0.4;
+            animation: pulse 0.3s;
+        }
+
+        .card.blocker {
+            pointer-events: none;
+            visibility: hidden; /* Invisible spacer for odd metrics */
+        }
+
+        /* Overlay Layout for Intermissions & Complete State */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #modal-overlay h2 {
+            font-size: 2.5rem;
+            color: #38bdf8;
+            margin-bottom: 15px;
+        }
+
+        #modal-overlay p {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            color: #94a3b8;
+            max-width: 400px;
+        }
+
+        button {
+            background: #0ea5e9;
+            color: #fff;
+            border: none;
+            padding: 12px 30px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #0284c7;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-header">
+        <h1>MEMORY QUEST</h1>
+        <div id="stats-bar">
+            <div>LEVEL: <span id="lbl-level" class="highlight">1 / 10</span> (<span id="lbl-grid">4x4</span>)</div>
+            <div>TOTAL TIME: <span id="lbl-timer" class="timer-highlight">00:00</span></div>
+        </div>
+    </div>
+
+    <div id="grid-container"></div>
+
+    <div id="modal-overlay">
+        <h2 id="modal-title">MEMORY CHALLENGE</h2>
+        <p id="modal-desc">Test your brain across 10 progressive tiers of complexity. Time starts running immediately.</p>
+        <button id="modal-btn" onclick="handleModalAction()">START GAME</button>
+    </div>
+
+    <script>
+        const gridContainer = document.getElementById('grid-container');
+        const lblLevel = document.getElementById('lbl-level');
+        const lblGrid = document.getElementById('lbl-grid');
+        const lblTimer = document.getElementById('lbl-timer');
+        
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalDesc = document.getElementById('modal-desc');
+        const modalBtn = document.getElementById('modal-btn');
+
+        // Game State Variables
+        let currentLevel = 1;
+        const maxLevels = 10;
+        let totalSecondsElapsed = 0;
+        let trackingInterval = null;
+        let levelPairsRemaining = 0;
+        
+        let firstFlippedCard = null;
+        let secondFlippedCard = null;
+        let processingMatch = false;
+
+        // Level Configurations Array
+        const levelSettings = {
+            1:  { rows: 4,  cols: 4 },
+            2:  { rows: 5,  cols: 5 },  // 25 Slots -> 1 Blocker, 12 Pairs
+            3:  { rows: 6,  cols: 6 },
+            4:  { rows: 7,  cols: 7 },  // 49 Slots -> 1 Blocker, 24 Pairs
+            5:  { rows: 8,  cols: 8 },
+            6:  { rows: 9,  cols: 9 },  // 81 Slots -> 1 Blocker, 40 Pairs
+            7:  { rows: 10, cols: 10 },
+            8:  { rows: 10, cols: 10 },
+            9:  { rows: 10, cols: 10 },
+            10: { rows: 10, cols: 10 }
+        };
+
+        // Universal Pool of Icons/Values (Safe ASCII Characters)
+        const assetPool = [
+            "☀","★","☂","☣","⚞","☯","⚡","⚽","⚓","💎",
+            "🍀","🍎","🍕","🛸","🎸","🎮","🚗","🚀","🦁","🐼",
+            "🎈","🔑","🔒","👑","🎨","🔮","🧿","🎲","🔔","🎁",
+            "🍉","🍓","🍍","🍿","🍦","👾","👻","🎃","🎄","🦊",
+            "🦄","🦉","🦋","🐙","🍿","🍩","🥨","🌮","🛹","🎯"
+        ];
+
+        // Central Intermission Trigger Controller
+        function handleModalAction() {
+            if (currentLevel === 1 && totalSecondsElapsed === 0) {
+                // Initial game launch
+                modalOverlay.style.display = 'none';
+                startGlobalTimer();
+                buildLevelGrid(currentLevel);
+            } else if (currentLevel <= maxLevels) {
+                // Next Level trigger
+                modalOverlay.style.display = 'none';
+                buildLevelGrid(currentLevel);
+            } else {
+                // Reset match sequence entirely
+                currentLevel = 1;
+                totalSecondsElapsed = 0;
+                modalOverlay.style.display = 'none';
+                startGlobalTimer();
+                buildLevelGrid(currentLevel);
+            }
+        }
+
+        function startGlobalTimer() {
+            if(trackingInterval) clearInterval(trackingInterval);
+            trackingInterval = setInterval(() => {
+                totalSecondsElapsed++;
+                let mins = Math.floor(totalSecondsElapsed / 60).toString().padStart(2, '0');
+                let secs = (totalSecondsElapsed % 60).toString().padStart(2, '0');
+                lblTimer.innerText = `${mins}:${secs}`;
+            }, 1000);
+        }
+
+        function buildLevelGrid(level) {
+            gridContainer.innerHTML = ""; // Wipe past elements
+            const settings = levelSettings[level];
+            
+            lblLevel.innerText = `${level} / ${maxLevels}`;
+            lblGrid.innerText = `${settings.rows}x${settings.cols}`;
+
+            // Handle Dynamic CSS Properties for grid structure
+            gridContainer.style.gridTemplateRows = `repeat(${settings.rows}, 1fr)`;
+            gridContainer.style.gridTemplateColumns = `repeat(${settings.cols}, 1fr)`;
+
+            // Dynamically scale text inside components based on grid volume density
+            let fontSize = settings.rows > 7 ? '0.9rem' : settings.rows > 5 ? '1.2rem' : '1.7rem';
+            gridContainer.style.setProperty('--card-font-size', fontSize);
+
+            const totalSlots = settings.rows * settings.cols;
+            const absolutePairsNeeded = Math.floor(totalSlots / 2);
+            levelPairsRemaining = absolutePairsNeeded;
+
+            // Generate pairs array
+            let rawDeckValues = [];
+            for (let i = 0; i < absolutePairsNeeded; i++) {
+                // Modulo wrapper ensures values repeat safely if pool threshold is exceeded
+                let symbol = assetPool[i % assetPool.length];
+                rawDeckValues.push(symbol, symbol);
+            }
+
+            // Linear Fisher-Yates Shuffle Vector
+            for (let i = rawDeckValues.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [rawDeckValues[i], rawDeckValues[j]] = [rawDeckValues[j], rawDeckValues[i]];
+            }
+
+            // Structural Assembly Routine
+            let valueIndex = 0;
+            const alternateBlockerIndex = Math.floor(totalSlots / 2); // Center placement marker
+
+            for (let i = 0; i < totalSlots; i++) {
+                const cardNode = document.createElement('div');
+                cardNode.classList.add('card');
+
+                // Evaluate mathematically odd spacer blockers
+                if (totalSlots % 2 !== 0 && i === alternateBlockerIndex) {
+                    cardNode.classList.add('blocker');
+                    gridContainer.appendChild(cardNode);
+                    continue;
+                }
+
+                const internalIdentity = rawDeckValues[valueIndex++];
+                cardNode.setAttribute('data-value', internalIdentity);
+
+                cardNode.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-back">?</div>
+                        <div class="card-front">${internalIdentity}</div>
+                    </div>
+                `;
+
+                cardNode.addEventListener('click', () => onCardClicked(cardNode));
+                gridContainer.appendChild(cardNode);
+            }
+        }
+
+        function onCardClicked(selectedCard) {
+            if (processingMatch) return;
+            if (selectedCard.classList.contains('flipped') || selectedCard.classList.contains('matched')) return;
+
+            selectedCard.classList.add('flipped');
+
+            if (!firstFlippedCard) {
+                firstFlippedCard = selectedCard;
+                return;
+            }
+
+            secondFlippedCard = selectedCard;
+            evaluateMatchPair();
+        }
+
+        function evaluateMatchPair() {
+            processingMatch = true;
+            let matchIsIdentical = firstFlippedCard.getAttribute('data-value') === secondFlippedCard.getAttribute('data-value');
+
+            if (matchIsIdentical) {
+                firstFlippedCard.classList.add('matched');
+                secondFlippedCard.classList.add('matched');
+                levelPairsRemaining--;
+
+                resetTurnPointers();
+
+                if (levelPairsRemaining === 0) {
+                    setTimeout(triggerLevelCleared, 600);
+                }
+            } else {
+                // Failed attempt logic: spin back out after slight delay
+                setTimeout(() => {
+                    firstFlippedCard.classList.remove('flipped');
+                    secondFlippedCard.classList.remove('flipped');
+                    resetTurnPointers();
+                }, 900);
+            }
+        }
+
+        function resetTurnPointers() {
+            firstFlippedCard = null;
+            secondFlippedCard = null;
+            processingMatch = false;
+        }
+
+        function triggerLevelCleared() {
+            currentLevel++;
+            
+            if (currentLevel <= maxLevels) {
+                modalTitle.innerText = "LEVEL CLEARED!";
+                modalDesc.innerText = `Great job! Prepare yourself for Level ${currentLevel} (${levelSettings[currentLevel].rows}x${levelSettings[currentLevel].cols}).`;
+                modalBtn.innerText = `START LEVEL ${currentLevel}`;
+                modalOverlay.style.display = 'flex';
+            } else {
+                // Ending Win state trigger
+                clearInterval(trackingInterval);
+                let finalMins = Math.floor(totalSecondsElapsed / 60).toString().padStart(2, '0');
+                let finalSecs = (totalSecondsElapsed % 60).toString().padStart(2, '0');
+                
+                modalTitle.innerText = "🏆 GRANDMASTER CHAMPION!";
+                modalDesc.innerText = `Unbelievable! You conquered all 10 distinct levels.\n\nTotal Game Time: ${finalMins}m ${finalSecs}s.`;
+                modalBtn.innerText = "PLAY AGAIN";
+                modalOverlay.style.display = 'flex';
+            }
+        }
+    </script>
+</body>
+</html>
