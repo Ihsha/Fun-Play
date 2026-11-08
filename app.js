@@ -67,6 +67,21 @@ const GAMES_DATABASE = [
     "featured": true,
     "controls": "WASD/Arrow keys to move, Mouse to aim & look, Space to jump, Shift to run. On-screen touch controls on mobile, full gamepad support on desktop."
   },
+   {
+    "id": "IGI",
+    "title": "IGI",
+    "category": "action",
+    "badge": "OPEN FIRE",
+    "rating": 4.2,
+    "plays": "2.3M",      
+    "desc": "Project I.G.I.: I'm Going In",
+    "thumb": "https://m.media-amazon.com/images/M/MV5BYzBjNWQyM2YtZWVmNS00YzMxLTk4MTQtN2QzODQ2YjI0MDQ3XkEyXkFqcGc@._V1_.jpg",
+    "url": "https://playigi.com/",
+    "type": "external",
+    "adfree": false,
+    "featured": true,
+    "controls": "WASD/Arrow keys to move, Mouse to aim & look, Space to jump, Shift to run. On-screen touch controls on mobile, full gamepad support on desktop."
+  },
   {
     "id": "Traffic Rider",
     "title": "Traffic Rider",
