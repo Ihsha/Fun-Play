@@ -28,7 +28,7 @@ const GAMES_DATABASE = [
     "rating": 4.9,
     "plays": "1.2M",
     "desc": "The full open-world classic running in your browser. Neon-soaked Miami, Tommy Vercetti, and total chaos — no download required.",
-    "thumb": "ats/gta-vc.webp",
+    "thumb": "ats/gtavc.webp",
     "url": "https://vcweb.studynotes.top/",
     "type": "external",
     "trendingThumb": "https://media1.tenor.com/m/T45snMeFSRgAAAAd/gta-vice-city-vice-city.gif", 
