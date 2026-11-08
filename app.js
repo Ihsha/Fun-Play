@@ -126,7 +126,7 @@ const GAMES_DATABASE = [
     "url": "https://worms.zone/game/web/",
     "type": "external",
     "adfree": true,
-    "trendingThumb": "",
+    "trendingVideo": "ats/ws.mp4",
     "featured": true,
     "controls": "WASD/Arrow keys to move, Mouse to aim & look, Space to jump, Shift to run. On-screen touch controls on mobile, full gamepad support on desktop."
   },
